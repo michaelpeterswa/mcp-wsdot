@@ -126,6 +126,13 @@ func main() {
 			),
 			whc.GetSchedulesTodayByRouteIDHandler,
 		),
+		mcpserver.NewTool(
+			mcp.NewTool(
+				"get_current_time",
+				mcp.WithDescription("get the current time"),
+			),
+			handlers.CurrentTimeHandler,
+		),
 	}
 
 	err = mcpserver.StartServer(ctx, c, mcpserver.WithTools(tools))
