@@ -7,7 +7,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/michaelpeterswa/go-mcp-template/internal/config"
+	"github.com/michaelpeterswa/mcp-wsdot/internal/config"
 )
 
 type MCPServer struct {

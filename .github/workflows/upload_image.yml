@@ -75,5 +75,5 @@ jobs:
           compress_assets: true
           sha256sum: true
           # yamllint disable-line rule:line-length
-          ldflags: -X github.com/michaelpeterswa/go-mcp-template/internal/config.AppVersion=${{ steps.meta.outputs.version }}
-          project_path: ./cmd/go-mcp-template
+          ldflags: -X github.com/michaelpeterswa/mcp-wsdot/internal/config.AppVersion=${{ steps.meta.outputs.version }}
+          project_path: ./cmd/mcp-wsdot
