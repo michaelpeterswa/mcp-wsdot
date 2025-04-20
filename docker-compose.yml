@@ -1,0 +1,45 @@
+---
+services:
+  main:
+    build: .
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      # logging
+      LOG_LEVEL: "info"
+
+      # metrics
+      METRICS_ENABLED: "true"
+      METRICS_PORT: "8081"
+
+      SERVER_NAME: "go-mcp-template"
+      TRANSPORT: "sse"
+      SSE_PORT: "8080"
+
+      LOCAL: "true"
+
+      # tracing
+      TRACING_ENABLED: "false"
+      TRACING_SAMPLERATE: "1.0"
+      TRACING_SERVICE: "go-start"
+      TRACING_VERSION: "0.0.1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4317"
+
+      # grpc (otlp tracing)
+      GRPC_GO_LOG_VERBOSITY_LEVEL: 99
+      GRPC_GO_LOG_SEVERITY_LEVEL: info
+
+  lgtm:
+    image: grafana/otel-lgtm
+    ports:
+      - "3000:3000" # Grafana UI
+      - "4317:4317" # OTLP
+      - "4318:4318" # OTLPHTTP
+    volumes:
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./docker/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/grafana-dashboards.yaml
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
