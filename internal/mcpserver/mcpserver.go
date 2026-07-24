@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -61,16 +62,55 @@ func newMCPServer(name string, opts ...MCPServerOption) *server.MCPServer {
 	return s
 }
 
+// StartServer builds the MCP server and serves it over the configured
+// transport. It blocks until the transport stops or ctx is cancelled; for the
+// HTTP transports, cancelling ctx triggers a graceful drain bounded by
+// c.ShutdownTimeout.
 func StartServer(ctx context.Context, c *config.Config, opts ...MCPServerOption) error {
-	switch c.Transport {
-	case "stdio":
-		return server.NewStdioServer(newMCPServer(c.ServerName, opts...)).Listen(context.Background(), os.Stdin, os.Stdout)
-	case "sse":
-		return server.NewSSEServer(newMCPServer(c.ServerName, opts...)).Start(fmt.Sprintf(":%d", c.SSEPort))
+	s := newMCPServer(c.ServerName, opts...)
+
+	switch c.ParsedTransport {
+	case config.TransportStdio:
+		return server.NewStdioServer(s).Listen(ctx, os.Stdin, os.Stdout)
+	case config.TransportStreamableHTTP:
+		return startStreamableHTTP(ctx, c, s)
+	case config.TransportSSE:
+		return startSSE(ctx, c, s)
 	default:
-		return fmt.Errorf(
-			"invalid transport type: %s, valid types are: stdio, sse",
-			c.Transport,
-		)
+		return fmt.Errorf("unhandled transport type: %q", c.ParsedTransport)
 	}
+}
+
+// startStreamableHTTP serves the streamable HTTP transport, the transport to
+// use when hosting this server remotely.
+func startStreamableHTTP(ctx context.Context, c *config.Config, s *server.MCPServer) error {
+	streamable := server.NewStreamableHTTPServer(s,
+		server.WithEndpointPath(c.HTTPPath),
+		server.WithStateLess(c.Stateless),
+		server.WithHeartbeatInterval(c.HeartbeatInterval),
+		server.WithStreamableHTTPLogger(slog.Default()),
+	)
+
+	mux := newServeMux(c, c.HTTPPath, streamable)
+
+	return serve(ctx, c, mux, streamable.Shutdown)
+}
+
+// startSSE serves the deprecated HTTP+SSE transport. The MCP specification
+// superseded it with streamable HTTP in March 2025; it remains here only for
+// clients that have not migrated.
+func startSSE(ctx context.Context, c *config.Config, s *server.MCPServer) error {
+	slog.Warn("the sse transport is deprecated by the mcp specification, prefer TRANSPORT=streamablehttp")
+
+	sse := server.NewSSEServer(s,
+		server.WithKeepAlive(c.HeartbeatInterval > 0),
+		server.WithKeepAliveInterval(c.HeartbeatInterval),
+	)
+
+	// SSEServer routes internally between its own /sse and /message endpoints,
+	// so it is mounted as the catch-all; the health patterns registered by
+	// newServeMux are more specific and still win.
+	mux := newServeMux(c, "/", sse)
+
+	return serve(ctx, c, mux, sse.Shutdown)
 }

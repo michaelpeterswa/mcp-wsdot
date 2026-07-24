@@ -26,7 +26,61 @@ Run with docker-compose and check Grafana at `http://localhost:3000` for metrics
 
 ## Transports
 
-This application supports both SSE and STDIO transports using the environment variable `TRANSPORT`
+The transport is selected with the `TRANSPORT` environment variable:
+
+| `TRANSPORT`      | description                                                                 |
+|------------------|-----------------------------------------------------------------------------|
+| `streamablehttp` | **Default.** The current MCP HTTP transport. Use this to host the server remotely (e.g. in Kubernetes). |
+| `stdio`          | For local clients that launch the binary directly (Claude Desktop, the MCP Inspector). |
+| `sse`            | The legacy HTTP+SSE transport. **Deprecated** by the MCP spec in favor of `streamablehttp`; kept only for older clients. |
+
+`streamablehttp` and `sse` accept the following additional configuration:
+
+| variable                 | default          | description                                                                                   |
+|--------------------------|------------------|-----------------------------------------------------------------------------------------------|
+| `HTTP_PORT`              | `8080`           | Listen port. (`SSE_PORT` is still honored when `HTTP_PORT` is unset, for backward compatibility.) |
+| `HTTP_PATH`              | `/mcp`           | Path the MCP endpoint is served on (streamablehttp only).                                     |
+| `MCP_AUTH_TOKEN`         | _(unset)_        | When set, every MCP request must send `Authorization: Bearer <token>`. Unset disables auth.   |
+| `MCP_STATELESS`          | `false`          | Disable session tracking so requests can be load balanced across replicas without sticky sessions. |
+| `MCP_HEARTBEAT_INTERVAL` | `30s`            | Keep-alive interval for idle streams (helps through proxies/ingress). Zero disables it.       |
+| `SHUTDOWN_TIMEOUT`       | `15s`            | Grace period for draining in-flight requests on `SIGTERM`.                                     |
+
+The HTTP transports also expose two **unauthenticated** health endpoints for
+Kubernetes probes: `GET /healthz` (liveness) and `GET /readyz` (readiness).
+
+### Hosting remotely (Kubernetes)
+
+To host this server in a cluster for a remote client to consume, run the
+container with `TRANSPORT=streamablehttp` (the default) and a bearer token:
+
+```sh
+docker run -p 8080:8080 \
+  -e WSDOT_API_KEY=<your-key> \
+  -e TRANSPORT=streamablehttp \
+  -e MCP_AUTH_TOKEN=<a-long-random-token> \
+  ghcr.io/michaelpeterswa/mcp-wsdot:latest
+```
+
+A client then connects to `http://<host>:8080/mcp` over the streamable HTTP
+transport, sending the token as an `Authorization: Bearer` header. For example,
+an OpenClaw remote MCP server entry:
+
+```json
+{
+  "mcpServers": {
+    "wsdot": {
+      "transport": "streamable-http",
+      "url": "https://wsdot.example.com/mcp",
+      "headers": { "Authorization": "Bearer <a-long-random-token>" }
+    }
+  }
+}
+```
+
+For deployment guidance — probe paths, ports, and the full environment
+variable reference — see the tables above. The container listens on `:8080`
+(MCP) and `:8081` (Prometheus metrics, when `METRICS_ENABLED=true`), runs as a
+non-root user, and drains gracefully on `SIGTERM`.
 
 ## Current Tools
 
