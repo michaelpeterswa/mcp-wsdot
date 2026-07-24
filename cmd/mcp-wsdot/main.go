@@ -18,6 +18,7 @@ import (
 	"alpineworks.io/ootel"
 	"alpineworks.io/wsdot"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/michaelpeterswa/mcp-wsdot/internal/config"
 	"github.com/michaelpeterswa/mcp-wsdot/internal/handlers"
 	"github.com/michaelpeterswa/mcp-wsdot/internal/logging"
@@ -122,11 +123,25 @@ func main() {
 	// non-destructive. get_current_time is a local clock (closed world); the
 	// WSDOT-backed tools reach an external API (open world). Clients such as
 	// openclaw use these hints when deciding what to auto-approve.
+	//
+	// Descriptions deliberately include the words people actually use ("ferry",
+	// "boat", "sailing", "Washington State Ferries", terminal/route names) so
+	// the tools are discoverable across a wide range of phrasings, and they
+	// spell out the call chain (routes first, then schedules by routeID).
 	tools := []mcpserver.Tool{
 		mcpserver.NewTool(
 			mcp.NewTool(
 				"get_route_schedules",
-				mcp.WithDescription("get the route names and ids for a schedule"),
+				mcp.WithTitleAnnotation("List ferry routes"),
+				mcp.WithDescription(
+					"List every Washington State Ferries (WSF/WSDOT) route with its "+
+						"name and numeric RouteID — for example Seattle-Bainbridge, "+
+						"Seattle-Bremerton, Edmonds-Kingston, Mukilteo-Clinton, and the "+
+						"Anacortes / San Juan Islands routes. Call this first to find the "+
+						"routeID that get_schedules_today_by_route_id needs. Use it for "+
+						"questions like \"which ferry routes exist\" or to map a pair of "+
+						"terminal names (e.g. Seattle to Bremerton) to a route.",
+				),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithOpenWorldHintAnnotation(true),
@@ -136,13 +151,22 @@ func main() {
 		mcpserver.NewTool(
 			mcp.NewTool(
 				"get_schedules_today_by_route_id",
-				mcp.WithDescription("get the schedule for a route today by route id"),
+				mcp.WithTitleAnnotation("Today's ferry sailing times for a route"),
+				mcp.WithDescription(
+					"Get today's Washington State Ferries (WSF) sailing times (ferry "+
+						"departures) for one route, given its numeric routeID. Answers "+
+						"questions like \"when is the next boat\", \"the next few sailings\", "+
+						"or \"the last ferry tonight\" for a route. The routeID comes from "+
+						"get_route_schedules — call that first if you only know the "+
+						"terminal or route names. Set onlyRemainingTime to return just the "+
+						"sailings still to come today.",
+				),
 				mcp.WithNumber("routeID",
-					mcp.Description("the route id"),
+					mcp.Description("Numeric RouteID from get_route_schedules (the RouteID field)."),
 					mcp.Required(),
 				),
 				mcp.WithBoolean("onlyRemainingTime",
-					mcp.Description("only return the remaining sailing times"),
+					mcp.Description("If true, return only sailings still remaining today rather than the full day's schedule."),
 				),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
@@ -153,7 +177,13 @@ func main() {
 		mcpserver.NewTool(
 			mcp.NewTool(
 				"get_current_time",
-				mcp.WithDescription("get the current time"),
+				mcp.WithTitleAnnotation("Current Pacific time"),
+				mcp.WithDescription(
+					"Get the current date and time in the US Pacific timezone "+
+						"(America/Los_Angeles, PST/PDT) — the timezone all ferry "+
+						"schedules are in. Use it to reason about \"now\", \"today\", "+
+						"\"the next sailing\", or \"tonight\" relative to schedule times.",
+				),
 				mcp.WithReadOnlyHintAnnotation(true),
 				mcp.WithDestructiveHintAnnotation(false),
 				mcp.WithOpenWorldHintAnnotation(false),
@@ -162,7 +192,21 @@ func main() {
 		),
 	}
 
-	err = mcpserver.StartServer(ctx, c, mcpserver.WithTools(tools))
+	// Server-level instructions tell client/agent routers what this whole
+	// server is for, so it surfaces for ferry/transit prompts.
+	instructions := "Washington State Ferries (WSF/WSDOT) schedule server. " +
+		"Provides ferry routes and today's sailing (departure) times for the " +
+		"Washington State Ferries system — Seattle-Bainbridge, Seattle-Bremerton, " +
+		"Edmonds-Kingston, Mukilteo-Clinton, Fauntleroy-Vashon-Southworth, the " +
+		"Anacortes / San Juan Islands routes, and more. Typical flow: call " +
+		"get_route_schedules to resolve a route or terminal-name pair to a " +
+		"routeID, then get_schedules_today_by_route_id for that route's times. " +
+		"get_current_time gives the Pacific time schedules are expressed in."
+
+	err = mcpserver.StartServer(ctx, c,
+		mcpserver.WithServerOptions(server.WithInstructions(instructions)),
+		mcpserver.WithTools(tools),
+	)
 	if err != nil {
 		slog.Error("could not start server", slog.String("error", err.Error()))
 		os.Exit(1)
