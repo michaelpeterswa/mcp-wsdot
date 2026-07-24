@@ -18,8 +18,16 @@ services:
       # WSDOT_API_KEY: ""
 
       SERVER_NAME: "mcp-wsdot"
-      TRANSPORT: "sse"
-      SSE_PORT: "8080"
+
+      # transport: streamablehttp (default, use this for remote hosting),
+      # sse (deprecated), or stdio. HTTP_PATH defaults to /mcp.
+      TRANSPORT: "streamablehttp"
+      HTTP_PORT: "8080"
+      HTTP_PATH: "/mcp"
+
+      # Bearer token clients must present as "Authorization: Bearer <token>".
+      # Leave unset to disable auth for local development.
+      # MCP_AUTH_TOKEN: "local-dev-token"
 
       LOCAL: "true"
 

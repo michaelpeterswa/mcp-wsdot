@@ -6,29 +6,29 @@ import (
 	"fmt"
 
 	"alpineworks.io/wsdot"
-	"alpineworks.io/wsdot/ferries"
+	"alpineworks.io/wsdot/vessels"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
 type WSDOTHandlerClient struct {
 	wsdotClient   *wsdot.WSDOTClient
-	ferriesClient *ferries.FerriesClient
+	vesselsClient *vessels.VesselsClient
 }
 
 func NewWSDOTHandlerClient(w *wsdot.WSDOTClient) (*WSDOTHandlerClient, error) {
-	ferriesClient, err := ferries.NewFerriesClient(w)
+	vesselsClient, err := vessels.NewVesselsClient(w)
 	if err != nil {
-		return nil, fmt.Errorf("could not create ferries client: %w", err)
+		return nil, fmt.Errorf("could not create vessels client: %w", err)
 	}
 
 	return &WSDOTHandlerClient{
 		wsdotClient:   w,
-		ferriesClient: ferriesClient,
+		vesselsClient: vesselsClient,
 	}, nil
 }
 
 func (whc *WSDOTHandlerClient) GetRouteSchedulesHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	routeSchedules, err := whc.ferriesClient.GetRouteSchedules()
+	routeSchedules, err := whc.vesselsClient.GetRouteSchedules()
 	if err != nil {
 		return nil, fmt.Errorf("could not get route schedules: %w", err)
 	}
@@ -45,7 +45,7 @@ func (whc *WSDOTHandlerClient) GetSchedulesTodayByRouteIDHandler(ctx context.Con
 	routeID := mcp.ParseInt(request, "routeID", -1)
 	onlyRemainingTime := mcp.ParseBoolean(request, "onlyRemainingTime", false)
 
-	schedulesToday, err := whc.ferriesClient.GetSchedulesTodayByRouteID(routeID, onlyRemainingTime)
+	schedulesToday, err := whc.vesselsClient.GetSchedulesTodayByRouteID(routeID, onlyRemainingTime)
 	if err != nil {
 		return nil, fmt.Errorf("could not get schedules today by route ID: %w", err)
 	}

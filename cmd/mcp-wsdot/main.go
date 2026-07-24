@@ -6,7 +6,14 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
+
+	// get_current_time resolves America/Los_Angeles at runtime. Embedding the
+	// tz database keeps that working on distroless and scratch images, which
+	// ship no /usr/share/zoneinfo.
+	_ "time/tzdata"
 
 	"alpineworks.io/ootel"
 	"alpineworks.io/wsdot"
@@ -31,7 +38,10 @@ func main() {
 		log.Fatalf("could not convert log level: %s", err)
 	}
 
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	// Logs go to stderr, not stdout: the stdio transport speaks JSON-RPC over
+	// stdout and any log line written there corrupts the stream. Docker and
+	// Kubernetes collect both streams identically.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slogLevel,
 	})))
 	c, err := config.NewConfig()
@@ -40,7 +50,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
+	// Kubernetes sends SIGTERM and then waits out terminationGracePeriodSeconds
+	// before SIGKILL; cancelling ctx here is what lets in-flight tool calls
+	// finish during a rolling update.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	exporterType := ootel.ExporterTypePrometheus
 	if c.Local {
@@ -104,11 +118,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Every tool here only reads upstream data, so annotate them read-only and
+	// non-destructive. get_current_time is a local clock (closed world); the
+	// WSDOT-backed tools reach an external API (open world). Clients such as
+	// openclaw use these hints when deciding what to auto-approve.
 	tools := []mcpserver.Tool{
 		mcpserver.NewTool(
 			mcp.NewTool(
 				"get_route_schedules",
 				mcp.WithDescription("get the route names and ids for a schedule"),
+				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithDestructiveHintAnnotation(false),
+				mcp.WithOpenWorldHintAnnotation(true),
 			),
 			whc.GetRouteSchedulesHandler,
 		),
@@ -123,6 +144,9 @@ func main() {
 				mcp.WithBoolean("onlyRemainingTime",
 					mcp.Description("only return the remaining sailing times"),
 				),
+				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithDestructiveHintAnnotation(false),
+				mcp.WithOpenWorldHintAnnotation(true),
 			),
 			whc.GetSchedulesTodayByRouteIDHandler,
 		),
@@ -130,6 +154,9 @@ func main() {
 			mcp.NewTool(
 				"get_current_time",
 				mcp.WithDescription("get the current time"),
+				mcp.WithReadOnlyHintAnnotation(true),
+				mcp.WithDestructiveHintAnnotation(false),
+				mcp.WithOpenWorldHintAnnotation(false),
 			),
 			handlers.CurrentTimeHandler,
 		),
