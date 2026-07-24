@@ -33,7 +33,9 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.0
+          # v2.0.x is built with go1.24 and refuses the go1.25 directive that
+          # mcp-go v0.57 requires; v2.4+ is built with go1.25.
+          version: v2.4
           args: --timeout=5m --enable=bodyclose
 
   yamllint:
