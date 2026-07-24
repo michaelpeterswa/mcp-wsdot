@@ -1,0 +1,21 @@
+# Keep the build context small. The image builds with module download, so a
+# local vendor/ tree (if one exists) is not needed and only bloats the context.
+vendor/
+
+.git
+.gitignore
+.githooks
+.github
+.dockerignore
+
+Dockerfile
+docker-compose.yml
+docker/
+
+*.md
+LICENSE
+
+.env
+.releaserc
+commitlint.config.js
+Makefile
